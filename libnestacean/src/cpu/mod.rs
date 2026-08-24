@@ -1,6 +1,10 @@
 use std::sync::mpsc::{self, Receiver, Sender};
 
-use crate::mmap::MemoryMap;
+use crate::{
+    Bus,
+    cart::{Cart, Mapper},
+    mmap::MemoryMap,
+};
 
 pub(crate) mod opcodes;
 
@@ -32,19 +36,29 @@ impl Default for Registers {
     }
 }
 
-pub(crate) struct Cpu {
+pub(crate) struct Cpu<'a> {
     version: CpuVersion,
     pub registers: Registers,
     address_bus: (Sender<u16>, Receiver<u16>),
     data_bus: (Sender<u8>, Receiver<u8>),
+    mmap: MemoryMap<'a>,
 }
-impl Cpu {
+impl Cpu<'static> {
     pub(crate) fn new() -> Self {
+        let cart = Cart {
+            expansion_rom: [0; 0x1FDF],
+            ram: [0; 0x2000],
+            rom: [0; 0x8000],
+            mapper: Mapper {},
+        };
+        let address_bus = mpsc::channel();
+        let data_bus = mpsc::channel();
         Self {
             version: CpuVersion::Ricoh2A03,
             registers: Registers::default(),
-            address_bus: mpsc::channel(),
-            data_bus: mpsc::channel(),
+            address_bus,
+            data_bus,
+            mmap: MemoryMap::new(cart, &address_bus, &data_bus),
         }
     }
 

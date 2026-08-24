@@ -1,3 +1,4 @@
+mod apu;
 mod cart;
 mod cpu;
 mod mmap;
@@ -50,7 +51,7 @@ impl Nes {
     fn new(cart_rom: [u8; 0x8000]) -> Self {
         let mut mem = MemoryMap::new(cart_rom);
         Self {
-            cpu: Cpu::new(&mut mem),
+            cpu: Cpu::new(),
             mem,
         }
     }

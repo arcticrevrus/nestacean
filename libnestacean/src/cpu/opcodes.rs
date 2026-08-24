@@ -1,7 +1,7 @@
 use std::ops::BitAnd;
 
-use crate::cpu::cpu::Registers;
 use crate::Bus;
+use crate::cpu::Registers;
 
 #[allow(clippy::upper_case_acronyms)]
 enum Instruction {
@@ -78,7 +78,8 @@ impl Operation {
                     .wrapping_add(registers.p.bitand(1))
             }
             AND => registers.a = registers.a.bitand(memory),
-            ASL => memory = 
+            ASL => (),
+            _ => unimplemented!(),
         }
     }
 

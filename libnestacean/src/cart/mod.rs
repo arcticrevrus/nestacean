@@ -2,7 +2,7 @@ use std::sync::mpsc::{Receiver, Sender};
 
 use crate::Bus;
 
-struct Mapper {}
+pub struct Mapper {}
 
 pub(crate) struct Cart {
     pub expansion_rom: [u8; 0x1FDF],
