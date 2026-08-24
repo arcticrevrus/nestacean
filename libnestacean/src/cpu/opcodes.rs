@@ -82,7 +82,7 @@ impl Operation {
             _ => unimplemented!(),
         }
     }
-
+    /*
     fn from_opbyte(registers: &Registers, bus: &impl Bus) -> Self {
         let wrapped = |base, wrap| if wrap { return base + 1 } else { return base };
 
@@ -149,6 +149,8 @@ impl Operation {
                 }
             }
             0x79 => {}
-        }
+        };
+        todo!()
     }
+    */
 }

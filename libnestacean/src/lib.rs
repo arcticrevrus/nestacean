@@ -3,10 +3,12 @@ mod cart;
 mod cpu;
 mod mmap;
 
+use core::panic::PanicInfo;
 use mmap::MemoryMap;
 use std::sync::mpsc;
 use std::sync::mpsc::{Receiver, Sender};
 
+use crate::cart::Cart;
 use crate::cpu::{Cpu, CpuVersion};
 
 trait Bus {
@@ -45,18 +47,21 @@ impl SystemType {
 
 struct Nes {
     cpu: Cpu,
-    mem: MemoryMap,
 }
 impl Nes {
-    fn new(cart_rom: [u8; 0x8000]) -> Self {
-        let mut mem = MemoryMap::new(cart_rom);
+    fn new(cart: Cart) -> Self {
+        let cart = Cart {
+            expansion_rom: [0; 0x1FDF],
+            ram: [0; 0x2000],
+            rom: [0; 0x8000],
+            mapper: cart::Mapper {},
+        };
         Self {
-            cpu: Cpu::new(),
-            mem,
+            cpu: Cpu::new(cart),
         }
     }
 
     fn step(&mut self) {
-        self.cpu.step(&mut self.mem);
+        self.cpu.step();
     }
 }

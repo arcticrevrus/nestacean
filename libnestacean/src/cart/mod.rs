@@ -13,10 +13,10 @@ pub(crate) struct Cart {
 impl Bus for Cart {
     fn map_addr(&mut self, addr: u16) -> &mut u8 {
         match addr {
-            0x0..=0x4019 => panic!("Invalid address access for Cart"),
-            0x4020..=0x5FFF => self.expansion_rom[addr - 0x4020],
-            0x6000..=0x7FFF => self.ram[addr - 0x6000],
-            0x8000..=0xFFFF => self.rom[addr - 0x8000],
+            0x0..=0x401F => panic!("Invalid address access for Cart"),
+            0x4020..=0x5FFF => &mut self.expansion_rom[(addr - 0x4020) as usize],
+            0x6000..=0x7FFF => &mut self.ram[(addr - 0x6000) as usize],
+            0x8000..=0xFFFF => &mut self.rom[(addr - 0x8000) as usize],
         }
     }
     fn read(&mut self, address: &(Sender<u16>, Receiver<u16>), data: &(Sender<u8>, Receiver<u8>)) {

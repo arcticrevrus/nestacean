@@ -1,7 +1,6 @@
 use std::sync::mpsc::{self, Receiver, Sender};
 
 use crate::{
-    Bus,
     cart::{Cart, Mapper},
     mmap::MemoryMap,
 };
@@ -36,39 +35,29 @@ impl Default for Registers {
     }
 }
 
-pub(crate) struct Cpu<'a> {
+pub(crate) struct Cpu {
     version: CpuVersion,
     pub registers: Registers,
-    address_bus: (Sender<u16>, Receiver<u16>),
-    data_bus: (Sender<u8>, Receiver<u8>),
-    mmap: MemoryMap<'a>,
+    mmap: MemoryMap,
 }
-impl Cpu<'static> {
-    pub(crate) fn new() -> Self {
-        let cart = Cart {
-            expansion_rom: [0; 0x1FDF],
-            ram: [0; 0x2000],
-            rom: [0; 0x8000],
-            mapper: Mapper {},
-        };
-        let address_bus = mpsc::channel();
-        let data_bus = mpsc::channel();
+impl Cpu {
+    pub(crate) fn new(cart: Cart) -> Self {
         Self {
             version: CpuVersion::Ricoh2A03,
             registers: Registers::default(),
-            address_bus,
-            data_bus,
-            mmap: MemoryMap::new(cart, &address_bus, &data_bus),
+            mmap: MemoryMap::new(cart),
         }
     }
 
-    pub(crate) fn step(&mut self, mmap: MemoryMap) {
-        let opcode = mmap.read(self.registers.pc);
+    pub(crate) fn step(&mut self) {
+        let opcode = self.mmap.read(self.registers.pc);
         self.registers.pc = self.registers.pc.wrapping_add(1);
         let _ = opcode; // TODO: decode/execute
     }
 
+    /*
     fn fetch(&mut self, bus: &mut impl Bus, addr: u16) {
         let opbyte = bus.read(addr);
     }
+    */
 }
