@@ -1,5 +1,5 @@
 mod apu;
-mod cart;
+pub mod cart;
 mod cpu;
 mod mmap;
 
@@ -8,7 +8,7 @@ use mmap::MemoryMap;
 use std::sync::mpsc;
 use std::sync::mpsc::{Receiver, Sender};
 
-use crate::cart::Cart;
+pub use crate::cart::Cart;
 use crate::cpu::{Cpu, CpuVersion};
 
 trait Bus {
@@ -51,6 +51,7 @@ struct Nes {
 impl Nes {
     fn new(cart: Cart) -> Self {
         let cart = Cart {
+            file: None,
             expansion_rom: [0; 0x1FDF],
             ram: [0; 0x2000],
             rom: [0; 0x8000],

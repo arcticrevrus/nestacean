@@ -2,33 +2,17 @@ use crate::Bus;
 use std::sync::mpsc::Receiver;
 use std::sync::mpsc::Sender;
 
+#[derive(Default)]
 pub struct Pulse(pub [u8; 4]);
-impl Default for Pulse {
-    fn default() -> Self {
-        Self([0; 4])
-    }
-}
 
+#[derive(Default)]
 pub struct Triangle(pub [u8; 4]);
-impl Default for Triangle {
-    fn default() -> Self {
-        Self([0; 4])
-    }
-}
 
+#[derive(Default)]
 pub struct Noise(pub [u8; 4]);
-impl Default for Noise {
-    fn default() -> Self {
-        Self([0; 4])
-    }
-}
 
+#[derive(Default)]
 pub struct Dmc(pub [u8; 4]);
-impl Default for Dmc {
-    fn default() -> Self {
-        Self([0; 4])
-    }
-}
 
 #[derive(Default)]
 pub(crate) struct Apu {
@@ -44,13 +28,13 @@ pub(crate) struct Apu {
 impl Bus for Apu {
     fn map_addr(&mut self, address: u16) -> &mut u8 {
         match address {
-            0..=4 => &mut self.pulse1.0[address as usize],
-            5..=7 => &mut self.pulse2.0[(address - 4) as usize],
-            8..=11 => &mut self.triangle.0[(address - 8) as usize],
-            12..=15 => &mut self.noise.0[(address - 12) as usize],
-            16..=19 => &mut self.dmc.0[(address - 16) as usize],
-            20 => &mut self.status,
-            21 => &mut self.frame_counter,
+            0x4000..=0x4003 => &mut self.pulse1.0[(address - 0x4000) as usize],
+            0x4004..=0x4007 => &mut self.pulse2.0[(address - 0x4004) as usize],
+            0x4008..=0x400B => &mut self.triangle.0[(address - 0x4008) as usize],
+            0x400C..=0x400F => &mut self.noise.0[(address - 0x400C) as usize],
+            0x4010..=0x4013 => &mut self.dmc.0[(address - 0x4010) as usize],
+            0x4015 => &mut self.status,
+            0x4017 => &mut self.frame_counter,
             _ => panic!("Invalid APU address"),
         }
     }
