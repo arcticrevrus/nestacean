@@ -45,17 +45,18 @@ impl SystemType {
     }
 }
 
-struct Nes {
-    cpu: Cpu,
+pub struct Nes {
+    pub cpu: Cpu,
 }
 impl Nes {
-    fn new(cart: Cart) -> Self {
+    pub fn new(cart: Cart) -> Self {
         let cart = Cart {
             file: None,
             expansion_rom: [0; 0x1FDF],
             ram: [0; 0x2000],
             rom: [0; 0x8000],
-            mapper: cart::Mapper {},
+            ppu: [0; 0x2000],
+            mapper: cart::Mapper::Nrom,
         };
         Self {
             cpu: Cpu::new(cart),
