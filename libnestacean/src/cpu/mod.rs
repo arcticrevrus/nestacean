@@ -50,14 +50,20 @@ impl Cpu {
     }
 
     pub(crate) fn step(&mut self) {
-        let opcode = self.mmap.read(self.registers.pc);
-        self.registers.pc = self.registers.pc.wrapping_add(1);
-        let _ = opcode; // TODO: decode/execute
+        let bytes = self.fetch();
     }
 
-    /*
-    fn fetch(&mut self, bus: &mut impl Bus, addr: u16) {
-        let opbyte = bus.read(addr);
+    fn fetch(&mut self) -> [u8; 3] {
+        let mut output = [0; 3];
+        let mut i = 0;
+        while i < 3 {
+            output[i] = self.mmap.read(self.registers.pc + i as u16);
+            i += 1;
+        }
+        output
     }
-    */
+
+    fn decode(&mut self, fetchbytes: [u8; 3]) -> {
+        let [opbyte, arg1, arg2] = fetchbytes;
+    }
 }
