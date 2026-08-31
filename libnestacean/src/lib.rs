@@ -1,11 +1,9 @@
 mod apu;
 pub mod cart;
-mod cpu;
+pub mod cpu;
 mod mmap;
+pub mod ppu;
 
-use core::panic::PanicInfo;
-use mmap::MemoryMap;
-use std::sync::mpsc;
 use std::sync::mpsc::{Receiver, Sender};
 
 pub use crate::cart::Cart;
@@ -50,14 +48,6 @@ pub struct Nes {
 }
 impl Nes {
     pub fn new(cart: Cart) -> Self {
-        let cart = Cart {
-            file: None,
-            expansion_rom: [0; 0x1FDF],
-            ram: [0; 0x2000],
-            rom: [0; 0x8000],
-            ppu: [0; 0x2000],
-            mapper: cart::Mapper::Nrom,
-        };
         Self {
             cpu: Cpu::new(cart),
         }

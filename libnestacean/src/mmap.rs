@@ -1,55 +1,6 @@
 use std::sync::mpsc::{self, Receiver, Sender};
 
-use crate::{Bus, apu::Apu, cart::Cart};
-
-#[derive(Default)]
-pub(crate) struct Ppu {
-    ppuctrl: u8,
-    ppumask: u8,
-    ppustatus: u8,
-    oamaddr: u8,
-    oamdata: u8,
-    ppuscroll: u8,
-    ppuaddr: u8,
-    ppudata: u8,
-    oamdma: u8,
-}
-impl Bus for Ppu {
-    fn map_addr(&mut self, address: u16) -> &mut u8 {
-        match address {
-            0x2000..=0x3FFF => match (address - 0x2000) % 8 {
-                0 => &mut self.ppuctrl,
-                1 => &mut self.ppumask,
-                2 => &mut self.ppustatus,
-                3 => &mut self.oamaddr,
-                4 => &mut self.oamdata,
-                5 => &mut self.ppuscroll,
-                6 => &mut self.ppuaddr,
-                _ => &mut self.ppudata,
-            },
-            _ => panic!("Invaid address matched by PPU"),
-        }
-    }
-    fn read(&mut self, address: &(Sender<u16>, Receiver<u16>), data: &(Sender<u8>, Receiver<u8>)) {
-        let addr = address
-            .1
-            .recv()
-            .expect("Attempted to read from closed address bus");
-        let value = self.map_addr(addr);
-        let _ = data.0.send(*value);
-    }
-    fn write(&mut self, address: &(Sender<u16>, Receiver<u16>), data: &(Sender<u8>, Receiver<u8>)) {
-        let addr = address
-            .1
-            .recv()
-            .expect("Attempted to read from closed address bus");
-        let value = data
-            .1
-            .recv()
-            .expect("Attempted to read from closed data bus");
-        *self.map_addr(addr) = value
-    }
-}
+use crate::{Bus, apu::Apu, cart::Cart, ppu::Ppu};
 
 struct Ram([u8; 0x800]);
 impl Default for Ram {
@@ -85,7 +36,7 @@ impl Bus for Ram {
     }
 }
 
-pub(crate) struct MemoryMap {
+pub struct MemoryMap {
     address: (Sender<u16>, Receiver<u16>),
     data: (Sender<u8>, Receiver<u8>),
     ram: Ram,
@@ -93,7 +44,7 @@ pub(crate) struct MemoryMap {
     apu: Apu,
     apu_test: [u8; 4],
     irq_timer: [u8; 4],
-    cart: Cart,
+    pub cart: Cart,
 }
 impl MemoryMap {
     pub(crate) fn new(cart: Cart) -> Self {

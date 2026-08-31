@@ -140,14 +140,14 @@ impl Cart {
         let file = Some(RomFile::from_file(path)?);
         let mapper = Mapper::Nrom;
         let hi_rom_start = file.as_ref().unwrap().prg_rom.len().saturating_sub(0x4000);
-        let lo_rom = &file.as_ref().unwrap().prg_rom[0..=0x4000];
+        let lo_rom = &file.as_ref().unwrap().prg_rom[0..0x4000];
         let hi_rom = &file.as_ref().unwrap().prg_rom[hi_rom_start..];
         let mut rom: [u8; 0x8000] = [0; 0x8000];
         for (i, byte) in lo_rom.iter().enumerate() {
             rom[i] = *byte;
         }
         for (i, byte) in hi_rom.iter().enumerate() {
-            let i = i + 0x2000;
+            let i = i + 0x4000;
             rom[i] = *byte;
         }
 
