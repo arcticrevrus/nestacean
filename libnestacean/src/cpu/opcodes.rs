@@ -6,6 +6,7 @@ use crate::{
 };
 
 #[allow(clippy::upper_case_acronyms)]
+#[derive(Debug)]
 pub enum Instruction {
     ADC,
     AND,
@@ -62,6 +63,7 @@ pub enum Instruction {
     TYA,
 }
 
+#[derive(Debug)]
 pub enum AddressingMode {
     Immediate,
     ZeroPage,
@@ -78,6 +80,7 @@ pub enum AddressingMode {
     Indirect,
 }
 
+#[derive(Debug)]
 pub struct Operation {
     pub instruction: Instruction,
     pub mode: AddressingMode,
@@ -140,6 +143,7 @@ impl Operation {
             0x50 => (BVC, Relative),
             0x70 => (BVS, Relative),
             0x18 => (CLC, Implicit),
+            0xD8 => (CLD, Implicit),
             0x58 => (CLI, Implicit),
             0xB8 => (CLV, Implicit),
             0xC9 | 0xC5 | 0xD5 | 0xCD | 0xDD | 0xD9 | 0xC1 | 0xD1 => (
@@ -205,7 +209,8 @@ impl Operation {
                     _ => unreachable!(),
                 },
             ),
-            _ => todo!(),
+            0x78 => (SEI, Implicit),
+            _ => todo!("Todo: implement {opbyte:02X} opbyte"),
         };
         let (arg1, arg2) = match mode {
             ZeroPageX | ZeroPageY | AbsoluteX | AbsoluteY | IndexedIndirect | IndirectIndexed

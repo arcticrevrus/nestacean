@@ -7,8 +7,17 @@ use std::{
 
 use crate::Bus;
 
+#[derive(Debug, Clone, Copy)]
 pub enum Mapper {
-    Nrom,
+    Nrom = 0,
+}
+impl Mapper {
+    fn from_byte(byte: u8) -> Self {
+        match byte {
+            0x00 => Self::Nrom,
+            _ => todo!(),
+        }
+    }
 }
 
 #[derive(Debug)]
@@ -32,6 +41,7 @@ pub struct RomFile {
     pub chr_rom: Vec<u8>,
     pub pc_inst_rom: Option<Vec<u8>>,
     pub pc_prom: Option<Vec<u8>>,
+    pub mapper: Mapper,
 }
 impl RomFile {
     pub fn from_file(path: &Path) -> Result<Self, std::io::Error> {
@@ -59,6 +69,13 @@ impl RomFile {
         file.read_at(&mut chr_rom, (prg_rom_offset + prg_rom.len()) as u64)?;
         let chr_rom = chr_rom;
 
+        let hi_nib = header.flags_7 & 0b1111_0000;
+        dbg!(&hi_nib);
+        let lo_nib = (header.flags_6 & 0b1111_0000) >> 4;
+        dbg!(&lo_nib);
+        let mapper = hi_nib | lo_nib;
+        println!("mapper: {mapper:02X}");
+
         Ok(Self {
             header,
             trainer,
@@ -66,6 +83,7 @@ impl RomFile {
             chr_rom,
             pc_inst_rom: None,
             pc_prom: None,
+            mapper: Mapper::from_byte(mapper),
         })
     }
     fn verify_header(header: [u8; 16]) -> Option<RomHeader> {
@@ -138,7 +156,7 @@ impl Cart {
         // Naive implementation with hard coded nrom mapper
         // no save support
         let file = Some(RomFile::from_file(path)?);
-        let mapper = Mapper::Nrom;
+        let mapper = file.as_ref().unwrap().mapper;
         let hi_rom_start = file.as_ref().unwrap().prg_rom.len().saturating_sub(0x4000);
         let lo_rom = &file.as_ref().unwrap().prg_rom[0..0x4000];
         let hi_rom = &file.as_ref().unwrap().prg_rom[hi_rom_start..];

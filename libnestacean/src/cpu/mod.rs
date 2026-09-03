@@ -2,7 +2,7 @@ use std::time::{Duration, Instant};
 
 use crate::{
     cart::Cart,
-    cpu::opcodes::{Instruction, Operation},
+    cpu::opcodes::{AddressingMode, Instruction, Operation},
     mmap::MemoryMap,
 };
 
@@ -108,25 +108,33 @@ pub struct Cpu {
 }
 impl Cpu {
     pub(crate) fn new(cart: Cart) -> Self {
+        let mut registers = Registers::default();
+        let mut mmap = MemoryMap::new(cart);
+        let lobyte = mmap.read(0xFFFC);
+        let hibyte = mmap.read(0xFFFD);
+        registers.pc = ((hibyte as u16) << 8) | lobyte as u16;
         Self {
             version: CpuVersion::Ricoh2A03,
-            registers: Registers::default(),
-            mmap: MemoryMap::new(cart),
+            registers,
+            mmap,
             start_time: Instant::now(),
             cycle_count: 0,
         }
     }
 
-    pub(crate) fn step(&mut self) {
+    pub fn step(&mut self) {
         let bytes = self.fetch();
         let op = self.decode(bytes);
+        dbg!(&op);
+        self.execute(op);
+        self.registers.pc = self.registers.pc.wrapping_add(1);
     }
 
     fn fetch(&mut self) -> [u8; 3] {
         let mut output = [0; 3];
         let mut i = 0;
         while i < 3 {
-            output[i] = self.mmap.read(self.registers.pc + i as u16);
+            output[i] = self.mmap.read(self.registers.pc.wrapping_add(i as u16));
             i += 1;
         }
         output
@@ -136,16 +144,33 @@ impl Cpu {
         let [opbyte, arg1, arg2] = fetchbytes;
         Operation::from_bytes(opbyte, arg1, arg2, self)
     }
+    fn execute(&mut self, op: Operation) {
+        let mut arg = None;
+        match op.mode {
+            AddressingMode::Implicit => (),
+            AddressingMode::Immediate => {
+                arg = op.arg1;
+            }
+            _ => todo!(),
+        }
+        match op.instruction {
+            Instruction::BRK => self.brk(None),
+            Instruction::CLD => self.clear_decimal(),
+            Instruction::SEI => self.set_interrupt_disable(),
+            Instruction::LDA => self.load_to_register_a(arg.unwrap()),
+            _ => todo!(),
+        }
+    }
     fn tick_clock(&mut self, count: u8) {
         let rate = self.version.clock();
-        for _ in [0..count] {
+        for _ in 0..count {
             let mut target_cycles =
                 (self.start_time.elapsed().as_secs_f64() * rate as f64) as usize;
             while target_cycles <= self.cycle_count {
                 target_cycles = (self.start_time.elapsed().as_secs_f64() * rate as f64) as usize;
                 std::thread::sleep(Duration::from_micros(100));
             }
-            self.cycle_count.wrapping_add(1);
+            self.cycle_count = self.cycle_count.wrapping_add(1);
         }
     }
     fn add_with_carry(&mut self, arg: u8) {
@@ -224,5 +249,29 @@ impl Cpu {
                 .wrapping_add(destination as i8 as i16 as u16);
         }
     }
+    fn brk(&mut self, arg: Option<u8>) {
+        let val = self.registers.pc + 2;
+        let hi = (val >> 8) as u8;
+        let lo = (val & 0xFF) as u8;
+        self.mmap.write(self.registers.s as u16 + 0x100, hi);
+        self.registers.s -= 1;
+        self.mmap.write(self.registers.s as u16 + 0x100, lo);
+        self.registers.s -= 1;
+        self.mmap.write(
+            self.registers.s as u16 + 0x100,
+            self.registers.p | 0b0011_0000,
+        );
+        self.registers.s -= 1;
+        self.registers.pc = 0xFFFE;
+    }
+    fn set_interrupt_disable(&mut self) {
+        self.registers.p &= 0b1111_1011
+    }
+    fn clear_decimal(&mut self) {
+        self.registers.p &= 0b1111_0111
+    }
     fn return_from_interrupt(registers: &mut Registers) {}
+    fn load_to_register_a(&mut self, arg: u8) {
+        self.registers.a = arg
+    }
 }
