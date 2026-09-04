@@ -11,4 +11,5 @@ fn main() {
     nes.cpu.step();
     nes.cpu.step();
     nes.cpu.step();
+    nes.cpu.step();
 }

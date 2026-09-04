@@ -214,9 +214,9 @@ impl Operation {
         };
         let (arg1, arg2) = match mode {
             ZeroPageX | ZeroPageY | AbsoluteX | AbsoluteY | IndexedIndirect | IndirectIndexed
-            | Immediate | ZeroPage => (Some(arg1), None),
+            | Immediate | ZeroPage | Relative => (Some(arg1), None),
             Absolute => (Some(arg1), Some(arg2)),
-            Accumulator | Implicit | Indirect | Relative => (None, None),
+            Accumulator | Implicit | Indirect => (None, None),
         };
         Self {
             instruction,

@@ -148,17 +148,24 @@ impl Cpu {
         let mut arg = None;
         match op.mode {
             AddressingMode::Implicit => (),
-            AddressingMode::Immediate => {
+            AddressingMode::Immediate | AddressingMode::Relative => {
                 arg = op.arg1;
             }
-            _ => todo!(),
+            _ => {
+                eprintln!("Implement AddressingMode::{:?}", op.mode);
+                todo!()
+            }
         }
         match op.instruction {
             Instruction::BRK => self.brk(None),
             Instruction::CLD => self.clear_decimal(),
             Instruction::SEI => self.set_interrupt_disable(),
             Instruction::LDA => self.load_to_register_a(arg.unwrap()),
-            _ => todo!(),
+            Instruction::BPL => self.branch_if_plus(arg.unwrap()),
+            _ => {
+                eprintln!("Implement Instruction::{:?}", op.instruction);
+                todo!()
+            }
         }
     }
     fn tick_clock(&mut self, count: u8) {
@@ -243,14 +250,20 @@ impl Cpu {
     }
     fn branch_if_minus(registers: &mut Registers, destination: u8) {
         if registers.get_negative() == 0b1000_0000 {
-            let _ = registers
+            registers.pc = registers
                 .pc
                 .wrapping_add(2)
                 .wrapping_add(destination as i8 as i16 as u16);
         }
     }
+    fn branch_if_plus(&mut self, destination: u8) {
+        if self.registers.get_negative() != 0 {
+            return;
+        }
+        self.registers.pc = self.registers.pc.wrapping_add(destination as i8 as u16);
+    }
     fn brk(&mut self, arg: Option<u8>) {
-        let val = self.registers.pc + 2;
+        let val = self.registers.pc;
         let hi = (val >> 8) as u8;
         let lo = (val & 0xFF) as u8;
         self.mmap.write(self.registers.s as u16 + 0x100, hi);
