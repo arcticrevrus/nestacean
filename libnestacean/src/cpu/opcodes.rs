@@ -210,6 +210,20 @@ impl Operation {
                 },
             ),
             0x78 => (SEI, Implicit),
+            0x85 | 0x95 | 0x8D | 0x9D | 0x99 | 0x81 | 0x91 => (
+                STA,
+                match opbyte {
+                    0x85 => ZeroPage,
+                    0x95 => ZeroPageX,
+                    0x8D => Absolute,
+                    0x9D => AbsoluteX,
+                    0x99 => AbsoluteY,
+                    0x81 => IndirectIndexed,
+                    0xB1 => IndexedIndirect,
+                    _ => unreachable!(),
+                },
+            ),
+
             _ => todo!("Todo: implement {opbyte:02X} opbyte"),
         };
         let (arg1, arg2) = match mode {

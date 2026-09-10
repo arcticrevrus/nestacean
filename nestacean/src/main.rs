@@ -6,10 +6,7 @@ fn main() {
     let rom_file = "../test.nes";
     let cart = Cart::from_file(Path::new(rom_file)).unwrap();
     let mut nes = Nes::new(cart);
-    nes.cpu.step();
-    nes.cpu.step();
-    nes.cpu.step();
-    nes.cpu.step();
-    nes.cpu.step();
-    nes.cpu.step();
+    loop {
+        nes.cpu.step()
+    }
 }

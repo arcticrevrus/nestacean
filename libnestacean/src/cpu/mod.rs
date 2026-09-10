@@ -97,6 +97,17 @@ impl Registers {
     pub(crate) fn toggle_negative(&mut self) {
         self.p ^= 0b1000_0000;
     }
+    pub(crate) fn pc_hi(&self) -> u8 {
+        (self.pc >> 8) as u8
+    }
+    pub(crate) fn pc_lo(&self) -> u8 {
+        (self.pc & 0xFF) as u8
+    }
+}
+
+enum OpArg {
+    One(u8),
+    Two(u16),
 }
 
 pub struct Cpu {
@@ -127,7 +138,7 @@ impl Cpu {
         let op = self.decode(bytes);
         dbg!(&op);
         self.execute(op);
-        self.registers.pc = self.registers.pc.wrapping_add(1);
+        self.registers.pc = self.registers.pc.wrapping_add(2);
     }
 
     fn fetch(&mut self) -> [u8; 3] {
@@ -149,7 +160,12 @@ impl Cpu {
         match op.mode {
             AddressingMode::Implicit => (),
             AddressingMode::Immediate | AddressingMode::Relative => {
-                arg = op.arg1;
+                arg = Some(OpArg::One(op.arg1.unwrap()))
+            }
+            AddressingMode::Absolute => {
+                arg = Some(OpArg::Two(
+                    ((op.arg1.unwrap() as u16) << 8) & op.arg2.unwrap() as u16,
+                ))
             }
             _ => {
                 eprintln!("Implement AddressingMode::{:?}", op.mode);
@@ -162,6 +178,8 @@ impl Cpu {
             Instruction::SEI => self.set_interrupt_disable(),
             Instruction::LDA => self.load_to_register_a(arg.unwrap()),
             Instruction::BPL => self.branch_if_plus(arg.unwrap()),
+            Instruction::STA => self.store_a(arg.unwrap()),
+            Instruction::JSR => self.jsr(arg.unwrap()),
             _ => {
                 eprintln!("Implement Instruction::{:?}", op.instruction);
                 todo!()
@@ -256,25 +274,30 @@ impl Cpu {
                 .wrapping_add(destination as i8 as i16 as u16);
         }
     }
-    fn branch_if_plus(&mut self, destination: u8) {
-        if self.registers.get_negative() != 0 {
-            return;
+    fn branch_if_plus(&mut self, destination: OpArg) {
+        match destination {
+            OpArg::One(arg) => {
+                if self.registers.get_negative() != 0 {
+                    return;
+                }
+                self.registers.pc = self.registers.pc.wrapping_add(arg as i8 as u16);
+            }
+            _ => unreachable!(),
         }
-        self.registers.pc = self.registers.pc.wrapping_add(destination as i8 as u16);
     }
     fn brk(&mut self, arg: Option<u8>) {
         let val = self.registers.pc;
         let hi = (val >> 8) as u8;
         let lo = (val & 0xFF) as u8;
         self.mmap.write(self.registers.s as u16 + 0x100, hi);
-        self.registers.s -= 1;
+        self.registers.s = self.registers.s.wrapping_sub(1);
         self.mmap.write(self.registers.s as u16 + 0x100, lo);
-        self.registers.s -= 1;
+        self.registers.s = self.registers.s.wrapping_sub(1);
         self.mmap.write(
             self.registers.s as u16 + 0x100,
             self.registers.p | 0b0011_0000,
         );
-        self.registers.s -= 1;
+        self.registers.s = self.registers.s.wrapping_sub(1);
         self.registers.pc = 0xFFFE;
     }
     fn set_interrupt_disable(&mut self) {
@@ -284,7 +307,30 @@ impl Cpu {
         self.registers.p &= 0b1111_0111
     }
     fn return_from_interrupt(registers: &mut Registers) {}
-    fn load_to_register_a(&mut self, arg: u8) {
-        self.registers.a = arg
+    fn load_to_register_a(&mut self, arg: OpArg) {
+        match arg {
+            OpArg::One(a) => self.registers.a = a,
+            _ => unreachable!(),
+        }
+    }
+    fn store_a(&mut self, arg: OpArg) {
+        match arg {
+            OpArg::Two(a) => self.mmap.write(a, self.registers.a),
+            _ => unreachable!(),
+        }
+    }
+    fn jsr(&mut self, arg: OpArg) {
+        match arg {
+            OpArg::Two(a) => {
+                self.mmap
+                    .write(self.registers.s as u16 + 0x0100, self.registers.pc_hi());
+                self.registers.s -= 1;
+                self.mmap
+                    .write(self.registers.s as u16 + 0x100, self.registers.pc_lo());
+                self.registers.s -= 1;
+                self.registers.pc = a;
+            }
+            _ => unreachable!(),
+        }
     }
 }
