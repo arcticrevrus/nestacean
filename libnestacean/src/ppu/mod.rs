@@ -1,4 +1,8 @@
-use std::sync::mpsc::{Receiver, Sender};
+use std::{
+    sync::mpsc::{Receiver, Sender},
+    thread,
+    time::{Duration, Instant},
+};
 
 use crate::Bus;
 
@@ -9,7 +13,6 @@ pub(crate) enum PpuVersion {
     Ricoh2C07,
 }
 
-#[derive(Default)]
 pub(crate) struct Ppu {
     pub ppuctrl: u8,
     pub ppumask: u8,
@@ -22,6 +25,27 @@ pub(crate) struct Ppu {
     pub oamdma: u8,
     version: PpuVersion,
     odd_frame: bool,
+    cycles: usize,
+    timestamp: Instant,
+}
+impl Default for Ppu {
+    fn default() -> Self {
+        Self {
+            ppuctrl: 0,
+            ppumask: 0,
+            ppustatus: 0,
+            oamdata: 0,
+            oamaddr: 0,
+            ppuscroll: 0,
+            ppuaddr: 0,
+            ppudata: 0,
+            oamdma: 0,
+            version: PpuVersion::Ricoh2C02,
+            odd_frame: false,
+            cycles: 0,
+            timestamp: Instant::now(),
+        }
+    }
 }
 impl Bus for Ppu {
     fn map_addr(&mut self, address: u16) -> &mut u8 {
@@ -52,10 +76,31 @@ impl Bus for Ppu {
             .1
             .recv()
             .expect("Attempted to read from closed address bus");
+        match self.map_addr(addr) {
+            0 | 1 | 5 | 6 | 7 => {
+                if self.cycles < 29658 * 3 {
+                    return;
+                }
+            }
+            _ => (),
+        }
         let value = data
             .1
             .recv()
             .expect("Attempted to read from closed data bus");
         *self.map_addr(addr) = value
+    }
+}
+impl Ppu {
+    pub fn step(&mut self, cycles: usize, rate: usize) {
+        let rate = rate * 3;
+        for _ in 0..cycles {
+            let mut target_cycles = (self.timestamp.elapsed().as_secs_f64() * rate as f64) as usize;
+            while target_cycles <= self.cycles {
+                target_cycles = (self.timestamp.elapsed().as_secs_f64() * rate as f64) as usize;
+                thread::sleep(Duration::from_micros(100));
+            }
+            self.cycles = self.cycles.wrapping_add(1)
+        }
     }
 }

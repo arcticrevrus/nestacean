@@ -223,6 +223,18 @@ impl Operation {
                     _ => unreachable!(),
                 },
             ),
+            0xA2 | 0xA6 | 0xB6 | 0xAE | 0xBE => (
+                LDX,
+                match opbyte {
+                    0xA2 => Immediate,
+                    0xA6 => ZeroPage,
+                    0xB6 => ZeroPageY,
+                    0xAE => Absolute,
+                    0xBE => AbsoluteY,
+                    _ => unreachable!(),
+                },
+            ),
+            0x9A => (TXS, Implicit),
 
             _ => todo!("Todo: implement {opbyte:02X} opbyte"),
         };

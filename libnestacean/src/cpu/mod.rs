@@ -136,9 +136,11 @@ impl Cpu {
     pub fn step(&mut self) {
         let bytes = self.fetch();
         let op = self.decode(bytes);
+        self.mmap.ppu.step(3, self.version.clock());
+        println!("{:04X}", self.registers.pc);
+        println!("{}", self.cycle_count);
         dbg!(&op);
         self.execute(op);
-        self.registers.pc = self.registers.pc.wrapping_add(2);
     }
 
     fn fetch(&mut self) -> [u8; 3] {
@@ -157,15 +159,29 @@ impl Cpu {
     }
     fn execute(&mut self, op: Operation) {
         let mut arg = None;
+        let mut pc_inc = 0;
         match op.mode {
-            AddressingMode::Implicit => (),
-            AddressingMode::Immediate | AddressingMode::Relative => {
-                arg = Some(OpArg::One(op.arg1.unwrap()))
+            AddressingMode::Implicit => {
+                self.tick_clock(2);
+                pc_inc += 1;
             }
+            AddressingMode::Immediate => {
+                arg = Some(OpArg::One(op.arg1.unwrap()));
+                self.tick_clock(2);
+                pc_inc += 2;
+            }
+            AddressingMode::Relative => arg = Some(OpArg::One(op.arg1.unwrap())),
             AddressingMode::Absolute => {
                 arg = Some(OpArg::Two(
-                    ((op.arg1.unwrap() as u16) << 8) & op.arg2.unwrap() as u16,
-                ))
+                    ((op.arg2.unwrap() as u16) << 8) | op.arg1.unwrap() as u16,
+                ));
+                self.tick_clock(3);
+                pc_inc += 3;
+            }
+            AddressingMode::ZeroPage => {
+                arg = Some(OpArg::Two(op.arg1.unwrap() as u16));
+                self.tick_clock(2);
+                pc_inc += 2;
             }
             _ => {
                 eprintln!("Implement AddressingMode::{:?}", op.mode);
@@ -176,15 +192,30 @@ impl Cpu {
             Instruction::BRK => self.brk(None),
             Instruction::CLD => self.clear_decimal(),
             Instruction::SEI => self.set_interrupt_disable(),
-            Instruction::LDA => self.load_to_register_a(arg.unwrap()),
+            Instruction::LDA => {
+                self.load_to_register_a(arg.unwrap());
+                self.tick_clock(match op.mode {
+                    AddressingMode::Absolute => 1,
+                    _ => 0,
+                });
+            }
             Instruction::BPL => self.branch_if_plus(arg.unwrap()),
-            Instruction::STA => self.store_a(arg.unwrap()),
+            Instruction::STA => {
+                self.store_a(arg.unwrap());
+                self.tick_clock(match op.mode {
+                    AddressingMode::Absolute => 1,
+                    _ => 0,
+                });
+            }
             Instruction::JSR => self.jsr(arg.unwrap()),
+            Instruction::LDX => self.load_to_register_x(arg.unwrap()),
+            Instruction::TXS => self.transfer_x_to_stack_pointer(),
             _ => {
                 eprintln!("Implement Instruction::{:?}", op.instruction);
                 todo!()
             }
         }
+        self.registers.pc = self.registers.pc.wrapping_add(pc_inc);
     }
     fn tick_clock(&mut self, count: u8) {
         let rate = self.version.clock();
@@ -275,12 +306,15 @@ impl Cpu {
         }
     }
     fn branch_if_plus(&mut self, destination: OpArg) {
+        self.tick_clock(2);
         match destination {
             OpArg::One(arg) => {
-                if self.registers.get_negative() != 0 {
+                if self.registers.get_negative() == 0 {
+                    self.registers.pc = self.registers.pc.wrapping_add(arg as i8 as u16);
+                    self.tick_clock(1);
                     return;
                 }
-                self.registers.pc = self.registers.pc.wrapping_add(arg as i8 as u16);
+                self.registers.pc = self.registers.pc.wrapping_add(2);
             }
             _ => unreachable!(),
         }
@@ -309,10 +343,25 @@ impl Cpu {
     fn return_from_interrupt(registers: &mut Registers) {}
     fn load_to_register_a(&mut self, arg: OpArg) {
         match arg {
+            OpArg::Two(a) => self.registers.a = self.mmap.read(a),
             OpArg::One(a) => self.registers.a = a,
+        }
+        self.registers
+            .set_negative(self.registers.a & (1 << 7) == 0);
+    }
+    fn load_to_register_x(&mut self, arg: OpArg) {
+        match arg {
+            OpArg::One(a) => {
+                self.registers.x = a;
+                self.registers.set_negative(a & (1 << 7) != 0);
+                if a == 0 {
+                    self.registers.set_zero(true)
+                }
+            }
             _ => unreachable!(),
         }
     }
+
     fn store_a(&mut self, arg: OpArg) {
         match arg {
             OpArg::Two(a) => self.mmap.write(a, self.registers.a),
@@ -332,5 +381,8 @@ impl Cpu {
             }
             _ => unreachable!(),
         }
+    }
+    fn transfer_x_to_stack_pointer(&mut self) {
+        self.registers.s = self.registers.x
     }
 }

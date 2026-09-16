@@ -40,7 +40,7 @@ pub struct MemoryMap {
     address: (Sender<u16>, Receiver<u16>),
     data: (Sender<u8>, Receiver<u8>),
     ram: Ram,
-    ppu: Ppu,
+    pub(crate) ppu: Ppu,
     apu: Apu,
     apu_test: [u8; 4],
     irq_timer: [u8; 4],
