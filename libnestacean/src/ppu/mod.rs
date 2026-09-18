@@ -12,6 +12,31 @@ pub(crate) enum PpuVersion {
     Ricoh2C02,
     Ricoh2C07,
 }
+enum NtscRegion {
+    Hsync,
+    BackPorch,
+    BackPorch2,
+    ColorBurst,
+    Pulse,
+    LeftBorder,
+    Active,
+    RightBorder,
+    FrontPorch,
+    BottomBorder,
+    Vblank,
+    VblankSerration,
+}
+impl NtscRegion {
+    fn get_duration(&self, row: u16, odd_frame: bool) -> u16 {
+        use NtscRegion::*;
+        match self {
+            Hsync => 25,
+            BackPorch => 4,
+            ColorBurst => 15,
+            BackPorch2 => 5,
+        }
+    }
+}
 
 pub(crate) struct Ppu {
     pub ppuctrl: u8,
@@ -27,6 +52,8 @@ pub(crate) struct Ppu {
     odd_frame: bool,
     cycles: usize,
     timestamp: Instant,
+    row: u16,
+    column: u16,
 }
 impl Default for Ppu {
     fn default() -> Self {
@@ -44,6 +71,8 @@ impl Default for Ppu {
             odd_frame: false,
             cycles: 0,
             timestamp: Instant::now(),
+            row: 0,
+            column: 0,
         }
     }
 }

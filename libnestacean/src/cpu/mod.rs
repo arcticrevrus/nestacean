@@ -236,7 +236,8 @@ impl Cpu {
         self.registers.pc = self.registers.pc.wrapping_add(pc_inc);
     }
     fn tick_clock(&mut self, count: u8) {
-        let rate = self.version.clock();
+        // hard coding for ntsc
+        let rate = self.version.clock() / 12;
         for _ in 0..count {
             let mut target_cycles =
                 (self.start_time.elapsed().as_secs_f64() * rate as f64) as usize;
