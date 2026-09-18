@@ -178,6 +178,17 @@ impl Cpu {
                 self.tick_clock(3);
                 pc_inc += 3;
             }
+            AddressingMode::AbsoluteX => {
+                let base = ((op.arg2.unwrap() as u16) << 8) | op.arg1.unwrap() as u16;
+                let dest = base.wrapping_add(self.registers.pc);
+                let wrapped = base & 0xFF00 != dest & 0xFF00;
+                arg = Some(OpArg::One(self.mmap.read(dest)));
+                self.tick_clock(match wrapped {
+                    false => 4,
+                    true => 5,
+                });
+                pc_inc += 3;
+            }
             AddressingMode::ZeroPage => {
                 arg = Some(OpArg::Two(op.arg1.unwrap() as u16));
                 self.tick_clock(2);
@@ -199,7 +210,10 @@ impl Cpu {
                     _ => 0,
                 });
             }
-            Instruction::BPL => self.branch_if_plus(arg.unwrap()),
+            Instruction::BPL => {
+                self.branch_if_plus(arg.unwrap());
+                pc_inc = 0;
+            }
             Instruction::STA => {
                 self.store_a(arg.unwrap());
                 self.tick_clock(match op.mode {
@@ -207,8 +221,12 @@ impl Cpu {
                     _ => 0,
                 });
             }
-            Instruction::JSR => self.jsr(arg.unwrap()),
+            Instruction::JSR => {
+                self.jsr(arg.unwrap());
+                pc_inc = 0;
+            }
             Instruction::LDX => self.load_to_register_x(arg.unwrap()),
+            Instruction::LDY => self.load_to_register_y(arg.unwrap()),
             Instruction::TXS => self.transfer_x_to_stack_pointer(),
             _ => {
                 eprintln!("Implement Instruction::{:?}", op.instruction);
@@ -309,12 +327,13 @@ impl Cpu {
         self.tick_clock(2);
         match destination {
             OpArg::One(arg) => {
-                if self.registers.get_negative() == 0 {
-                    self.registers.pc = self.registers.pc.wrapping_add(arg as i8 as u16);
+                if self.registers.get_negative() != 0 {
+                    self.registers.pc = self.registers.pc.wrapping_add(arg as i8 as u16 - 1);
                     self.tick_clock(1);
-                    return;
+                } else {
+                    self.registers.pc = self.registers.pc.wrapping_add(2);
                 }
-                self.registers.pc = self.registers.pc.wrapping_add(2);
+                self.tick_clock(2);
             }
             _ => unreachable!(),
         }
@@ -346,6 +365,7 @@ impl Cpu {
             OpArg::Two(a) => self.registers.a = self.mmap.read(a),
             OpArg::One(a) => self.registers.a = a,
         }
+        self.registers.set_zero(self.registers.a == 0);
         self.registers
             .set_negative(self.registers.a & (1 << 7) == 0);
     }
@@ -353,6 +373,18 @@ impl Cpu {
         match arg {
             OpArg::One(a) => {
                 self.registers.x = a;
+                self.registers.set_negative(a & (1 << 7) != 0);
+                if a == 0 {
+                    self.registers.set_zero(true)
+                }
+            }
+            _ => unreachable!(),
+        }
+    }
+    fn load_to_register_y(&mut self, arg: OpArg) {
+        match arg {
+            OpArg::One(a) => {
+                self.registers.y = a;
                 self.registers.set_negative(a & (1 << 7) != 0);
                 if a == 0 {
                     self.registers.set_zero(true)

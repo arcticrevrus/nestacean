@@ -235,13 +235,24 @@ impl Operation {
                 },
             ),
             0x9A => (TXS, Implicit),
+            0xA0 | 0xA4 | 0xB4 | 0xAC | 0xBC => (
+                LDY,
+                match opbyte {
+                    0xA0 => Immediate,
+                    0xA4 => ZeroPage,
+                    0xB4 => ZeroPageX,
+                    0xAC => Absolute,
+                    0xBC => AbsoluteX,
+                    _ => unreachable!(),
+                },
+            ),
 
             _ => todo!("Todo: implement {opbyte:02X} opbyte"),
         };
         let (arg1, arg2) = match mode {
-            ZeroPageX | ZeroPageY | AbsoluteX | AbsoluteY | IndexedIndirect | IndirectIndexed
-            | Immediate | ZeroPage | Relative => (Some(arg1), None),
-            Absolute => (Some(arg1), Some(arg2)),
+            ZeroPageX | ZeroPageY | IndexedIndirect | IndirectIndexed | Immediate | ZeroPage
+            | Relative => (Some(arg1), None),
+            Absolute | AbsoluteX | AbsoluteY => (Some(arg1), Some(arg2)),
             Accumulator | Implicit | Indirect => (None, None),
         };
         Self {

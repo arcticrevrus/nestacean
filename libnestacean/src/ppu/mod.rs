@@ -79,6 +79,10 @@ impl Bus for Ppu {
         match self.map_addr(addr) {
             0 | 1 | 5 | 6 | 7 => {
                 if self.cycles < 29658 * 3 {
+                    _ = data
+                        .1
+                        .recv()
+                        .expect("Attempted to read from a closed data bus");
                     return;
                 }
             }
