@@ -15,7 +15,6 @@ pub(crate) enum PpuVersion {
 enum NtscRegion {
     Hsync,
     BackPorch,
-    BackPorch2,
     ColorBurst,
     Pulse,
     LeftBorder,
@@ -27,14 +26,29 @@ enum NtscRegion {
     VblankSerration,
 }
 impl NtscRegion {
-    fn get_duration(&self, row: u16, odd_frame: bool) -> u16 {
+    fn get(row: usize, column: usize) -> [Option<Self>; 2] {
         use NtscRegion::*;
-        match self {
-            Hsync => 25,
-            BackPorch => 4,
-            ColorBurst => 15,
-            BackPorch2 => 5,
+        let main;
+        let mut cb = None;
+        match row {
+            0..=239 => match column {
+                277..302 => main = Some(Hsync),
+                302..306 => main = Some(BackPorch),
+                306..321 => {
+                    main = Some(BackPorch);
+                    cb = Some(ColorBurst);
+                }
+                321..326 => main = Some(BackPorch),
+                326 => main = Some(Pulse),
+                327..342 => main = Some(LeftBorder),
+                0..257 => main = Some(Active),
+                257..268 => main = Some(RightBorder),
+                268..277 => main = Some(FrontPorch),
+                _ => unreachable!(),
+            },
+            _ => todo!(),
         }
+        [main, cb]
     }
 }
 
@@ -135,5 +149,8 @@ impl Ppu {
             }
             self.cycles = self.cycles.wrapping_add(1)
         }
+    }
+    fn set_vblank(&mut self) {
+        self.ppustatus |= 0b1000_0000;
     }
 }
