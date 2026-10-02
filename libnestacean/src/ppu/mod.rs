@@ -12,6 +12,8 @@ pub(crate) enum PpuVersion {
     Ricoh2C02,
     Ricoh2C07,
 }
+
+#[derive(PartialEq)]
 enum NtscRegion {
     Hsync,
     BackPorch,
@@ -23,32 +25,72 @@ enum NtscRegion {
     FrontPorch,
     BottomBorder,
     Vblank,
-    VblankSerration,
+    VblankPulse,
+    VSyncSerration,
 }
 impl NtscRegion {
-    fn get(row: usize, column: usize) -> [Option<Self>; 2] {
+    #[inline(always)]
+    fn get(row: u16, column: u16) -> (Self, Option<Self>) {
         use NtscRegion::*;
-        let main;
         let mut cb = None;
-        match row {
+        let main = match row {
             0..=239 => match column {
-                277..302 => main = Some(Hsync),
-                302..306 => main = Some(BackPorch),
+                277..302 => Hsync,
+                302..306 => BackPorch,
                 306..321 => {
-                    main = Some(BackPorch);
                     cb = Some(ColorBurst);
+                    BackPorch
                 }
-                321..326 => main = Some(BackPorch),
-                326 => main = Some(Pulse),
-                327..342 => main = Some(LeftBorder),
-                0..257 => main = Some(Active),
-                257..268 => main = Some(RightBorder),
-                268..277 => main = Some(FrontPorch),
+                321..326 => BackPorch,
+                326 => Pulse,
+                327..342 => LeftBorder,
+                0..257 => Active,
+                257..268 => RightBorder,
+                268..277 => FrontPorch,
                 _ => unreachable!(),
             },
-            _ => todo!(),
-        }
-        [main, cb]
+            240..=241 => match column {
+                277..302 => Hsync,
+                302..306 => BackPorch,
+                306..321 => {
+                    cb = Some(ColorBurst);
+                    BackPorch
+                }
+                321..326 => BackPorch,
+                326 => Pulse,
+                327..342 | 0..268 => BottomBorder,
+                268..277 => FrontPorch,
+                _ => unreachable!(),
+            },
+            242..=244 => match column {
+                277..302 => Hsync,
+                302..306 => BackPorch,
+                306..321 => {
+                    cb = Some(ColorBurst);
+                    BackPorch
+                }
+                326..342 | 0..277 => Vblank,
+                _ => unreachable!(),
+            },
+            245..=247 => match column {
+                277..342 | 0..254 => VblankPulse,
+                254..277 => VSyncSerration,
+                _ => unreachable!(),
+            },
+            248..=261 => match column {
+                277..302 => Hsync,
+                302..306 => BackPorch,
+                306..321 => {
+                    cb = Some(ColorBurst);
+                    BackPorch
+                }
+                321..326 => BackPorch,
+                326..342 | 0..277 => Vblank,
+                _ => unreachable!(),
+            },
+            _ => unreachable!(),
+        };
+        (main, cb)
     }
 }
 
@@ -68,6 +110,8 @@ pub(crate) struct Ppu {
     timestamp: Instant,
     row: u16,
     column: u16,
+    vblank_read: bool,
+    reset: bool,
 }
 impl Default for Ppu {
     fn default() -> Self {
@@ -87,6 +131,8 @@ impl Default for Ppu {
             timestamp: Instant::now(),
             row: 0,
             column: 0,
+            vblank_read: false,
+            reset: false,
         }
     }
 }
@@ -113,15 +159,18 @@ impl Bus for Ppu {
             .expect("Attempted to read from closed address bus");
         let value = self.map_addr(addr);
         let _ = data.0.send(*value);
+        if addr == 0x2002 {
+            self.clear_vblank();
+        }
     }
     fn write(&mut self, address: &(Sender<u16>, Receiver<u16>), data: &(Sender<u8>, Receiver<u8>)) {
         let addr = address
             .1
             .recv()
             .expect("Attempted to read from closed address bus");
-        match self.map_addr(addr) {
-            0 | 1 | 5 | 6 | 7 => {
-                if self.cycles < 29658 * 3 {
+        match (addr - 0x2000) % 8 {
+            0 | 1 | 5 | 6 => {
+                if self.cycles < 29658 * 3 && self.reset {
                     _ = data
                         .1
                         .recv()
@@ -147,10 +196,30 @@ impl Ppu {
                 target_cycles = (self.timestamp.elapsed().as_secs_f64() * rate as f64) as usize;
                 thread::sleep(Duration::from_micros(100));
             }
-            self.cycles = self.cycles.wrapping_add(1)
+            self.cycles = self.cycles.wrapping_add(1);
+            self.next_dot();
+        }
+    }
+    fn next_dot(&mut self) {
+        self.column += 1;
+        if self.column > 340 {
+            self.column = 0;
+            self.row = if self.row == 261 { 0 } else { self.row + 1 };
+        }
+        match (self.row, self.column) {
+            (241, 1) => self.set_vblank(),
+            (261, 1) => self.clear_vblank(),
+            _ => {}
         }
     }
     fn set_vblank(&mut self) {
         self.ppustatus |= 0b1000_0000;
+    }
+    fn clear_vblank(&mut self) {
+        self.ppustatus &= 0b0111_1111;
+    }
+    #[inline]
+    fn render_active(&self) -> bool {
+        NtscRegion::get(self.row, self.column).0 == NtscRegion::Active
     }
 }

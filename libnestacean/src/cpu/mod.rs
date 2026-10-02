@@ -136,7 +136,6 @@ impl Cpu {
     pub fn step(&mut self) {
         let bytes = self.fetch();
         let op = self.decode(bytes);
-        self.mmap.ppu.step(3, self.version.clock());
         println!("{:04X}", self.registers.pc);
         println!("{}", self.cycle_count);
         dbg!(&op);
@@ -246,6 +245,7 @@ impl Cpu {
                 std::thread::sleep(Duration::from_micros(100));
             }
             self.cycle_count = self.cycle_count.wrapping_add(1);
+            self.mmap.ppu.step(3, self.version.clock());
         }
     }
     fn add_with_carry(&mut self, arg: u8) {
@@ -328,13 +328,16 @@ impl Cpu {
         self.tick_clock(2);
         match destination {
             OpArg::One(arg) => {
-                if self.registers.get_negative() != 0 {
-                    self.registers.pc = self.registers.pc.wrapping_add(arg as i8 as u16 - 1);
+                if self.registers.get_negative() == 0 {
+                    self.registers.pc = self
+                        .registers
+                        .pc
+                        .wrapping_add(2)
+                        .wrapping_add(arg as i8 as u16);
                     self.tick_clock(1);
                 } else {
                     self.registers.pc = self.registers.pc.wrapping_add(2);
                 }
-                self.tick_clock(2);
             }
             _ => unreachable!(),
         }
@@ -355,7 +358,7 @@ impl Cpu {
         self.registers.pc = 0xFFFE;
     }
     fn set_interrupt_disable(&mut self) {
-        self.registers.p &= 0b1111_1011
+        self.registers.p |= 0b0000_0100
     }
     fn clear_decimal(&mut self) {
         self.registers.p &= 0b1111_0111
@@ -368,7 +371,7 @@ impl Cpu {
         }
         self.registers.set_zero(self.registers.a == 0);
         self.registers
-            .set_negative(self.registers.a & (1 << 7) == 0);
+            .set_negative(self.registers.a & (1 << 7) != 0);
     }
     fn load_to_register_x(&mut self, arg: OpArg) {
         match arg {
