@@ -199,7 +199,7 @@ impl Cpu {
             }
         }
         match op.instruction {
-            Instruction::BRK => self.brk(None),
+            Instruction::BRK => self.brk(),
             Instruction::CLD => self.clear_decimal(),
             Instruction::SEI => self.set_interrupt_disable(),
             Instruction::LDA => {
@@ -220,6 +220,13 @@ impl Cpu {
                     _ => 0,
                 });
             }
+            Instruction::STX => {
+                self.store_x(arg.unwrap());
+                self.tick_clock(match op.mode {
+                    AddressingMode::Absolute => 1,
+                    _ => 0,
+                })
+            }
             Instruction::JSR => {
                 self.jsr(arg.unwrap());
                 pc_inc = 0;
@@ -227,6 +234,8 @@ impl Cpu {
             Instruction::LDX => self.load_to_register_x(arg.unwrap()),
             Instruction::LDY => self.load_to_register_y(arg.unwrap()),
             Instruction::TXS => self.transfer_x_to_stack_pointer(),
+            Instruction::CMP => self.compare_a(arg.unwrap()),
+            Instruction::BCS => self.branch_if_carry_set(arg.unwrap()),
             _ => {
                 eprintln!("Implement Instruction::{:?}", op.instruction);
                 todo!()
@@ -293,12 +302,19 @@ impl Cpu {
         };
         self.tick_clock(2);
     }
-    fn branch_if_carry_set(registers: &mut Registers, destination: u8) {
-        if registers.get_carry() == 1 {
-            registers.pc = registers
+    fn branch_if_carry_set(&mut self, arg: OpArg) {
+        self.tick_clock(2);
+        let destination = match arg {
+            OpArg::One(a) => a,
+            OpArg::Two(a) => self.mmap.read(a),
+        };
+        if self.registers.get_carry() == 1 {
+            self.registers.pc = self
+                .registers
                 .pc
                 .wrapping_add(2)
                 .wrapping_add(destination as i8 as i16 as u16);
+            self.tick_clock(1)
         };
     }
     fn branch_if_equal(registers: &mut Registers, destination: u8) {
@@ -342,7 +358,7 @@ impl Cpu {
             _ => unreachable!(),
         }
     }
-    fn brk(&mut self, arg: Option<u8>) {
+    fn brk(&mut self) {
         let val = self.registers.pc;
         let hi = (val >> 8) as u8;
         let lo = (val & 0xFF) as u8;
@@ -363,7 +379,6 @@ impl Cpu {
     fn clear_decimal(&mut self) {
         self.registers.p &= 0b1111_0111
     }
-    fn return_from_interrupt(registers: &mut Registers) {}
     fn load_to_register_a(&mut self, arg: OpArg) {
         match arg {
             OpArg::Two(a) => self.registers.a = self.mmap.read(a),
@@ -404,6 +419,12 @@ impl Cpu {
             _ => unreachable!(),
         }
     }
+    fn store_x(&mut self, arg: OpArg) {
+        match arg {
+            OpArg::Two(a) => self.mmap.write(a, self.registers.x),
+            _ => unreachable!(),
+        }
+    }
     fn jsr(&mut self, arg: OpArg) {
         match arg {
             OpArg::Two(a) => {
@@ -420,5 +441,16 @@ impl Cpu {
     }
     fn transfer_x_to_stack_pointer(&mut self) {
         self.registers.s = self.registers.x
+    }
+    fn compare_a(&mut self, arg: OpArg) {
+        self.tick_clock(2);
+        let (val, wrapped) = self.registers.a.overflowing_sub(match arg {
+            OpArg::One(a) => a,
+            OpArg::Two(a) => self.mmap.read(a),
+        });
+        self.registers.set_zero(val == 0);
+        self.registers.set_carry(!wrapped);
+        self.registers
+            .set_negative((val ^ 0b0111_1111) == 0b1000_0000);
     }
 }

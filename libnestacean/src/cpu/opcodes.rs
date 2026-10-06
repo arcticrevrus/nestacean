@@ -246,6 +246,9 @@ impl Operation {
                     _ => unreachable!(),
                 },
             ),
+            0x86 => (STX, ZeroPage),
+            0x96 => (STX, ZeroPageY),
+            0x8E => (STX, Absolute),
 
             _ => todo!("Todo: implement {opbyte:02X} opbyte"),
         };
