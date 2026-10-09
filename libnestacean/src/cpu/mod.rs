@@ -44,8 +44,8 @@ impl Default for Registers {
     }
 }
 impl Registers {
-    pub(crate) fn get_carry(&self) -> u8 {
-        self.p & 0b0000_0001
+    pub(crate) fn get_carry(&self) -> bool {
+        self.p & 0b0000_0001 == 0b0000_0001
     }
     pub(crate) fn set_carry(&mut self, set: bool) {
         if set {
@@ -57,8 +57,8 @@ impl Registers {
     pub(crate) fn toggle_carry(&mut self) {
         self.p ^= 0b0000_0001;
     }
-    pub(crate) fn get_zero(&self) -> u8 {
-        self.p & 0b0000_0010
+    pub(crate) fn get_zero(&self) -> bool {
+        self.p & 0b0000_0010 == 0b000_0010
     }
     pub(crate) fn set_zero(&mut self, set: bool) {
         if set {
@@ -169,7 +169,11 @@ impl Cpu {
                 self.tick_clock(2);
                 pc_inc += 2;
             }
-            AddressingMode::Relative => arg = Some(OpArg::One(op.arg1.unwrap())),
+            AddressingMode::Relative => {
+                arg = Some(OpArg::One(op.arg1.unwrap()));
+                self.tick_clock(2);
+                pc_inc += 2;
+            }
             AddressingMode::Absolute => {
                 arg = Some(OpArg::Two(
                     ((op.arg2.unwrap() as u16) << 8) | op.arg1.unwrap() as u16,
@@ -191,6 +195,23 @@ impl Cpu {
             AddressingMode::ZeroPage => {
                 arg = Some(OpArg::Two(op.arg1.unwrap() as u16));
                 self.tick_clock(2);
+                pc_inc += 2;
+            }
+            AddressingMode::IndexedIndirect => {
+                // val = PEEK(PEEK((arg + X) % 256) + PEEK((arg + X + 1) % 256) * 256)
+                let mem1 = self
+                    .mmap
+                    .read(op.arg1.unwrap().wrapping_add(self.registers.a) as u16 % 256);
+                let mem2 = self.mmap.read(
+                    (op.arg1
+                        .unwrap()
+                        .wrapping_add(self.registers.x)
+                        .wrapping_add(1)) as u16
+                        % 256,
+                );
+                let mem3 = self.mmap.read((mem1 + mem2) as u16) as u16 * 256;
+                arg = Some(OpArg::Two(mem3));
+                self.tick_clock(6);
                 pc_inc += 2;
             }
             _ => {
@@ -236,6 +257,13 @@ impl Cpu {
             Instruction::TXS => self.transfer_x_to_stack_pointer(),
             Instruction::CMP => self.compare_a(arg.unwrap()),
             Instruction::BCS => self.branch_if_carry_set(arg.unwrap()),
+            Instruction::CPX => self.compare_x(arg.unwrap()),
+            Instruction::BNE => self.branch_if_not_equal(arg.unwrap()),
+            Instruction::DEY => self.decrement_y(),
+            Instruction::DEX => self.decrement_x(),
+            Instruction::CPY => self.compare_y(arg.unwrap()),
+            Instruction::BCC => self.branch_if_carry_clear(arg.unwrap()),
+            Instruction::RTS => self.return_to_subroutine(),
             _ => {
                 eprintln!("Implement Instruction::{:?}", op.instruction);
                 todo!()
@@ -261,7 +289,8 @@ impl Cpu {
         let is_positive = self.registers.a >= 128;
         let mem_is_positive = arg >= 128;
         let (value, wrapped1) = self.registers.a.overflowing_add(arg);
-        let (value, wrapped2) = value.overflowing_add(self.registers.get_carry());
+        let (value, wrapped2) =
+            value.overflowing_add(if self.registers.get_carry() { 1 } else { 0 });
         let value_is_positive = value >= 128;
         self.registers.a = value;
         self.tick_clock(1);
@@ -291,13 +320,16 @@ impl Cpu {
         self.registers.set_negative(*value_ref >= 128);
         self.tick_clock(1);
     }
-    fn branch_if_carry_clear(&mut self, destination: u8) {
-        if self.registers.get_carry() == 0 {
+    fn branch_if_carry_clear(&mut self, arg: OpArg) {
+        let destination = match arg {
+            OpArg::One(a) => a,
+            _ => unreachable!(),
+        };
+        if !self.registers.get_carry() {
             self.tick_clock(1);
             self.registers.pc = self
                 .registers
                 .pc
-                .wrapping_add(2)
                 .wrapping_add(destination as i8 as i16 as u16);
         };
         self.tick_clock(2);
@@ -308,17 +340,30 @@ impl Cpu {
             OpArg::One(a) => a,
             OpArg::Two(a) => self.mmap.read(a),
         };
-        if self.registers.get_carry() == 1 {
+        if self.registers.get_carry() {
             self.registers.pc = self
                 .registers
                 .pc
-                .wrapping_add(2)
                 .wrapping_add(destination as i8 as i16 as u16);
             self.tick_clock(1)
         };
     }
+    fn branch_if_not_equal(&mut self, arg: OpArg) {
+        self.tick_clock(2);
+        let destination = match arg {
+            OpArg::One(a) => a,
+            OpArg::Two(a) => self.mmap.read(a),
+        };
+        if !self.registers.get_zero() {
+            self.tick_clock(1);
+            self.registers.pc = self
+                .registers
+                .pc
+                .wrapping_add(destination as i8 as i16 as u16)
+        }
+    }
     fn branch_if_equal(registers: &mut Registers, destination: u8) {
-        if registers.get_zero() == 0b0000_0010 {
+        if registers.get_zero() {
             registers.pc = registers
                 .pc
                 .wrapping_add(2)
@@ -451,6 +496,43 @@ impl Cpu {
         self.registers.set_zero(val == 0);
         self.registers.set_carry(!wrapped);
         self.registers
-            .set_negative((val ^ 0b0111_1111) == 0b1000_0000);
+            .set_negative((val ^ 0b0111_1111) != 0b1000_0000);
+    }
+    fn compare_x(&mut self, arg: OpArg) {
+        self.tick_clock(2);
+        let (val, wrapped) = self.registers.x.overflowing_sub(match arg {
+            OpArg::One(a) => a,
+            _ => unreachable!(),
+        });
+        self.registers.set_zero(val == 0);
+        self.registers.set_carry(!wrapped);
+        self.registers
+            .set_negative((val ^ 0b0111_1111) != 0b1000_0000);
+    }
+    fn compare_y(&mut self, arg: OpArg) {
+        self.tick_clock(2);
+        let (val, wrapped) = self.registers.y.overflowing_sub(match arg {
+            OpArg::One(a) => a,
+            _ => unreachable!(),
+        });
+        self.registers.set_zero(val == 0);
+        self.registers.set_carry(!wrapped);
+        self.registers
+            .set_negative((val ^ 0b0111_1111) != 0b1000_0000);
+    }
+    fn decrement_y(&mut self) {
+        self.tick_clock(2);
+        self.registers.y = self.registers.y.wrapping_sub(1);
+    }
+    fn decrement_x(&mut self) {
+        self.tick_clock(2);
+        self.registers.x = self.registers.y.wrapping_sub(1);
+    }
+    fn return_to_subroutine(&mut self) {
+        self.registers.s += 1;
+        let lo = self.mmap.read(self.registers.s as u16 + 0x0100) as u16;
+        self.registers.s += 1;
+        let hi = (self.mmap.read(self.registers.s as u16 + 0x0100) as u16) << 8;
+        self.registers.pc = (hi | lo).wrapping_add(1);
     }
 }

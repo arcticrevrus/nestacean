@@ -219,7 +219,7 @@ impl Operation {
                     0x9D => AbsoluteX,
                     0x99 => AbsoluteY,
                     0x81 => IndirectIndexed,
-                    0xB1 => IndexedIndirect,
+                    0x91 => IndexedIndirect,
                     _ => unreachable!(),
                 },
             ),
@@ -249,6 +249,7 @@ impl Operation {
             0x86 => (STX, ZeroPage),
             0x96 => (STX, ZeroPageY),
             0x8E => (STX, Absolute),
+            0x60 => (RTS, Implicit),
 
             _ => todo!("Todo: implement {opbyte:02X} opbyte"),
         };
